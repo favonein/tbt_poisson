@@ -5,7 +5,7 @@ from sisl.io.tbtrans import tbtncSileTBtrans
 
 
 
-def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True, ldos_tol=1e-6):
+def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True, ldos_tol=1e-10):
     """
     Plots the Local Density of States (LDOS) from a saved .npy file.
 
@@ -36,14 +36,16 @@ def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True
     valid_idx = np.where(ldos_x >= ldos_tol)[0]
     ldos_scatt = data[valid_idx, :, :]  # Shape: (n_valid_x, nz, nE)
 
-    print(f"LDOS data range is: (0,{x_range}),(0,{z_range}),({e_min},{e_max})")
+    x_vals = x_vals[valid_idx]
+
+    print(f"LDOS data range is: (0,{x_vals[-1]}),(0,{z_range}),({e_min},{e_max})")
 
     # Plot based on averaging preference
     if average_z:
         dz = z_vals[1] - z_vals[0]
         ldos_avg = np.sum(ldos_scatt, axis=1) * dz  # Integrate over Z
         plt.imshow(ldos_avg.T, aspect='auto', origin='lower',
-                   extent=[0, x_range, e_min, e_max],
+                   extent=[0, x_vals[-1], e_min, e_max],
                    cmap='inferno')
         plt.colorbar(label="LDOS (1/eV*Ang)")
         plt.xlabel("x (Ang)")
