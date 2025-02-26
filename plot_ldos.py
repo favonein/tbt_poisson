@@ -27,11 +27,11 @@ def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True
     z_vals = np.linspace(0, z_range, Nz)  # Z-direction
     e_min, e_max = e_vals[0], e_vals[-1]
 
-    dx = x_vals[1] - x_vals[0]
+    dz = z_vals[1] - z_vals[0]
     dE = e_vals[1] - e_vals[0]
 
     # Extract scattering region from grid
-    ldos_x = np.sum(data, axis=(3)) * dE * dx
+    ldos_x = np.sum(data, axis=(0)) * dE * dz
     # Get valid indices where LDOS integral is above tolerance
     valid_idx = np.where(ldos_x >= ldos_tol)[0]
     ldos_scatt = data[valid_idx, :, :]  # Shape: (n_valid_x, nz, nE)
