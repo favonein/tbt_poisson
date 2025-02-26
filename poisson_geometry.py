@@ -1,23 +1,25 @@
 import numpy as np
+from sisl.io.siesta import fdfSileSiesta
+from sisl.io.tbtrans import tbtncSileTBtrans
 
 # System parameters
 #
 # Nx, Nz, Nx_metal
 # x_full, z_axis, energy_axis
-# dx, dz
+# dx, dz, dE
 # Ec, Ev
 # D(x,z,E)
 
 
 class LDOSConfig:
     def __init__(self, fdfFile, tbtFile, ldosFile, metalDOSFile, semiDOSFile,
-                 extend_metal_x=50, extend_semi_x=500, dos_threshold=0):
+                 extend_metal_x=50, extend_semi_x=500, ldos_tol=1e-6):
         # DOS Input files
-        ldos_junction = np.load(ldosFile)  # Junction LDOS d(x, z, E)
+        ldos_device = np.load(ldosFile)  # Junction LDOS d(x, z, E)
         bulk_dos_metal = np.load(metalDOSFile)  # Metal bulk DOS D(z, E)
         bulk_dos_semi = np.load(semiDOSFile)  # Semiconductor bulk DOS D(z, E)
 
-        Nx_junction, x_len, z_len = self._extractFromLDOS(ldos_junction)
+        ldos_scatt, Nx_junction, x_len, z_len = self._extractFromLDOS(ldos_device, ldos_tol)
 
         # Create real-space grids
         x_junction = np.linspace(0, x_len, Nx_junction)
@@ -34,12 +36,12 @@ class LDOSConfig:
         print(f"Updated grid: Nx = {self.Nx}, Nz = {self.Nz}, dx = {self.dx:.3f} Ang, dz = {self.dz:.3f} Ang")
 
         # Compute CBM, VBM
-        self.E_c = self.energy_axis[np.where(bulk_dos_semi > dos_threshold)[0][0]]  # CBM
-        self.E_v = self.energy_axis[np.where(bulk_dos_semi > dos_threshold)[0][-1]]  # VBM
+        self.E_c = self.energy_axis[np.where(bulk_dos_semi > ldos_tol)[0][0]]  # CBM
+        self.E_v = self.energy_axis[np.where(bulk_dos_semi > ldos_tol)[0][-1]]  # VBM
 
         print(f"Computed E_c = {self.E_c:.3f} eV, E_v = {self.E_v:.3f} eV")
 
-        D_E_xz_junction = self._macroscopicAve(ldos_junction)
+        D_E_xz_junction = self._macroscopicAve(ldos_scatt)
         # Combine bulk DOS and junction LDOS
         D_E_xz = np.zeros((len(self.x_full), len(self.z_axis), len(self.energy_axis)))
         for i in range(self.x_full):
@@ -52,19 +54,16 @@ class LDOSConfig:
             else:                               # Junction Region
                 D_E_xz[i, :, :] = D_E_xz_junction[i, :, :]
 
-    def _extractFromLDOS(self, ldos_junction):
+    def _extractFromLDOS(self, ldos_junction, ldos_tol=1e-6):
         # Lattice Info
-        # fdf = fdfSileSiesta("Device_long.fdf")
-        # tbt = sisl.io.tbtrans.tbtncSileTBtrans("Device.TBT.nc")
+        fdf = fdfSileSiesta("Device_long.fdf")
+        tbt = tbtncSileTBtrans("Device.TBT.nc")
 
-        # lat = fdf.read_lattice(True)  # Read lattice vectors
-        # a1, a2, a3 = lat.cell  # Extract lattice vectors
-        # energy_axis = tbt.E # eV
+        lat = fdf.read_lattice(True)  # Read lattice vectors
+        a1, a2, a3 = lat.cell  # Extract lattice vectors
+        self.energy_axis = tbt.E # eV
+        self.dE = self.energy_axis[1] - self.energy_axis[0]
 
-        a1 = [1, 0, 0]
-        a3 = [0, 0, 1]
-
-        self.energy_axis = np.linspace(-1, 1, 100)
         # Define real-space dimensions based on transport and out-of-plane directions
         x_len = np.linalg.norm(a1)  # Transport direction (a1)
         z_len = np.linalg.norm(a3)  # Out-of-plane direction (a3)
@@ -72,9 +71,18 @@ class LDOSConfig:
         Nx_junction, self.Nz = ldos_junction.shape[:2]
         self.dx = x_len / Nx_junction  # Corrected x spacing
         self.dz = z_len / self.Nz  # Corrected z spacing
+
+        # Extract scattering region from grid
+        ldos_x = np.sum(ldos_junction, axis=(3)) * self.dE * self.dx
+        # Get valid indices where LDOS integral is above tolerance
+        valid_idx = np.where(ldos_x >= ldos_tol)[0]
+        ldos_scatt = ldos_junction[valid_idx, :, :]  # Shape: (n_valid_x, nz, nE)
+
+        Nx_junction_trim = ldos_scatt.shape[0]
+
         print(f"Lattice dimensions: x_len = {x_len:.3f} Ang, z_len = {z_len:.3f} Ang")
 
-        return Nx_junction, x_len, z_len
+        return ldos_scatt, Nx_junction_trim, x_len, z_len
 
 
     def _macroscopicAve(self, ldos_junction, metal_lattice_const = 1, semi_lattice_const = 1):
