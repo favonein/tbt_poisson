@@ -5,7 +5,7 @@ from sisl.io.tbtrans import tbtncSileTBtrans
 
 
 
-def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True, ldos_tol=1e-10):
+def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True, ldos_tol=1e-6):
     """
     Plots the Local Density of States (LDOS) from a saved .npy file.
 
@@ -27,25 +27,29 @@ def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True
     z_vals = np.linspace(0, z_range, Nz)  # Z-direction
     e_min, e_max = e_vals[0], e_vals[-1]
 
+    dx = x_vals[1] - x_vals[0]
     dz = z_vals[1] - z_vals[0]
     dE = e_vals[1] - e_vals[0]
 
+    cut = int(3 / dx)
     # Extract scattering region from grid
-    ldos_x = np.sum(data, axis=(0)) * dE * dz
+    ldos_x = np.sum(data, axis=(1,2)) * dz * dE
     # Get valid indices where LDOS integral is above tolerance
     valid_idx = np.where(ldos_x >= ldos_tol)[0]
+    # Remove one more angstrom from either side to get comfortably in the Scatt region
+    valid_idx = valid_idx[cut:-cut]
     ldos_scatt = data[valid_idx, :, :]  # Shape: (n_valid_x, nz, nE)
-
     x_vals = x_vals[valid_idx]
 
-    print(f"LDOS data range is: (0,{x_vals[-1]}),(0,{z_range}),({e_min},{e_max})")
+    print(f"LDOS scattering grid shape: {ldos_scatt.shape}")
+    print(f"LDOS data range is: ({x_vals[0]},{x_vals[-1]}),(0,{z_range}),({e_min},{e_max})")
 
     # Plot based on averaging preference
     if average_z:
         dz = z_vals[1] - z_vals[0]
         ldos_avg = np.sum(ldos_scatt, axis=1) * dz  # Integrate over Z
         plt.imshow(ldos_avg.T, aspect='auto', origin='lower',
-                   extent=[0, x_vals[-1], e_min, e_max],
+                   extent=[x_vals[0], x_vals[-1], e_min, e_max],
                    cmap='inferno')
         plt.colorbar(label="LDOS (1/eV*Ang)")
         plt.xlabel("x (Ang)")
