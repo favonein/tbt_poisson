@@ -74,6 +74,6 @@ z_len = np.linalg.norm(a3)  # Out-of-plane direction (a3)
 
 
 # Process ldos and plot
-plt = plot_ldos("ldos_arr_par.npy", x_range = x_len, z_range = z_len, energy_range = energy_axis, average_z=True)
+plt = plot_ldos("ldos_arr_par.npy", x_range = x_len, z_range = z_len, e_vals = energy_axis, average_z=True)
 
 plt.savefig('ldos_e.png')
