@@ -61,7 +61,7 @@ class LDOSConfig:
 
         lat = fdf.read_lattice(True)  # Read lattice vectors
         a1, a2, a3 = lat.cell  # Extract lattice vectors
-        self.energy_axis = tbt.E # eV
+        self.energy_axis = tbt.E  # eV
         self.dE = self.energy_axis[1] - self.energy_axis[0]
 
         # Define real-space dimensions based on transport and out-of-plane directions
@@ -72,10 +72,13 @@ class LDOSConfig:
         self.dx = x_len / Nx_junction  # Corrected x spacing
         self.dz = z_len / self.Nz  # Corrected z spacing
 
+        cut = int(3 / self.dx)
         # Extract scattering region from grid
-        ldos_x = np.sum(ldos_junction, axis=(3)) * self.dE * self.dx
+        ldos_x = np.sum(ldos_junction, axis=(1, 2)) * self.dz * self.dE
         # Get valid indices where LDOS integral is above tolerance
         valid_idx = np.where(ldos_x >= ldos_tol)[0]
+        # Remove one more angstrom from either side to get comfortably in the Scatt region
+        valid_idx = valid_idx[cut:-cut]
         ldos_scatt = ldos_junction[valid_idx, :, :]  # Shape: (n_valid_x, nz, nE)
 
         Nx_junction_trim = ldos_scatt.shape[0]
@@ -94,3 +97,4 @@ class LDOSConfig:
         D_E_xz_junction = np.apply_along_axis(lambda m: np.convolve(m, kernel, mode="same"), axis=0, arr=ldos_junction)
 
         return D_E_xz_junction
+
