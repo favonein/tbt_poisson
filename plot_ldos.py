@@ -30,19 +30,21 @@ def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True
     dx = x_vals[1] - x_vals[0]
     dz = z_vals[1] - z_vals[0]
     dE = e_vals[1] - e_vals[0]
+    print(f"Grid Density: dx={dx:.6f}, dz={dz:.6f}, dE={dE:.4f}")
 
     cut = int(3 / dx)
     # Extract scattering region from grid
     ldos_x = np.sum(data, axis=(1,2)) * dz * dE
     # Get valid indices where LDOS integral is above tolerance
-    valid_idx = np.where(ldos_x >= ldos_tol)[0]
+    valid_idx = np.where(ldos_x > ldos_tol)[0]
     # Remove one more angstrom from either side to get comfortably in the Scatt region
     valid_idx = valid_idx[cut:-cut]
     ldos_scatt = data[valid_idx, :, :]  # Shape: (n_valid_x, nz, nE)
+    #ldos_scatt = data
     x_vals = x_vals[valid_idx]
 
     print(f"LDOS scattering grid shape: {ldos_scatt.shape}")
-    print(f"LDOS data range is: ({x_vals[0]},{x_vals[-1]}),(0,{z_range}),({e_min},{e_max})")
+    print(f"LDOS data range is: ({x_vals[0]:.3f},{x_vals[-1]:.3f}),(0.000,{z_range:.3f}),({e_min:.3f},{e_max:.3f})")
 
     # Plot based on averaging preference
     if average_z:
@@ -76,10 +78,11 @@ a1, a2, a3 = lat.cell  # Extract lattice vectors
 energy_axis = tbt.E  # eV
 
 x_len = np.linalg.norm(a1)  # Transport direction (a1)
+y_len = np.linalg.norm(a2)
 z_len = np.linalg.norm(a3)  # Out-of-plane direction (a3)
 
-
+print(f"Loaded Device Geometry: \n{lat.cell}")
 # Process ldos and plot
-plt = plot_ldos("ldos_arr_par.npy", x_range = x_len, z_range = z_len, e_vals = energy_axis, average_z=True)
+plt = plot_ldos("ldos_arr_par.npy", x_range = y_len, z_range = z_len, e_vals = energy_axis, average_z=True)
 
 plt.savefig('ldos_e.png')
