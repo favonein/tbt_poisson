@@ -78,9 +78,9 @@ def compute_ldos(args):
    
     except Exception as e:
         print(f"Error at energy {E_pt}: {e}")
-        os._exit(1)
-
-
+        raise
+        
+        
 if __name__ == "__main__":
 
     # Limited memory bandwidth, deps on the grid spacings, size
