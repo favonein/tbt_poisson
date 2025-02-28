@@ -27,7 +27,7 @@ print(f"Vacuum axis:    {vacuum}")
 
 if transport == vacuum:
     print("Transport and Vacuum direction cannot be same")
-    os._exit(1)
+    raise ValueError("Transport and Vacuum direction cannot be the same")
 
 ave = ({0, 1, 2} - {transport, vacuum}).pop()   # Direction that is not transport or vacuum
 
@@ -43,39 +43,30 @@ grid_template = fdf.read_grid("ElectrostaticPotential")
 grid_template.fill(0)
 shape = grid_template.shape
 
-
 # Setup geometry information for grid
 geo = fdf.read_geometry()
 # Set supercell size, making sure that all indices are at least 3 for orbitals going beyond lattice cell
 geo.set_nsc(geo.find_nsc())
 geo.set_nsc(np.where(geo.nsc < 3, 3, geo.nsc))
 
-a1 = geo.cell[0]
-a2 = geo.cell[1]
-a3 = geo.cell[2]
-dx = shape[0] / np.linalg.norm(a1)
-dy = shape[1] / np.linalg.norm(a2)
-dz = shape[2] / np.linalg.norm(a3)
-
 print(f"Lattice Cell: \n{geo.cell}")
 print(f"Grid Shape: {shape}") 
 
-# Get energy resolved density matrix (DM)
-density_matrices = [tbt.density_matrix(float(E_pt), kavg=True, geometry=geo) for E_pt in tbt.E]
 
 # Projects energy resolved DM to real space densities
 def compute_ldos(args):
-    
-    try: 
-        mat, E_pt = args
-        temp_grid = grid_template.copy()
-        # Process matrix density onto real space
-        print(f"Processing Energy  {E_pt:.3f}", flush=True)
-        mat.density(temp_grid)
-        print(f"Processing Energy  {E_pt:.3f} Done", flush=True)
+    E_pt, syslabel = args
 
+    try:
+        temp_grid = grid_template.copy()
+        print(f"Processing Energy {E_pt:.3f}", flush=True)
+
+        tbt_local = sisl.io.tbtrans.tbtncSileTBtrans(syslabel + ".TBT.nc")
+        mat = tbt_local.density_matrix(float(E_pt), kavg=True, geometry=geo)
+        mat.density(temp_grid)
+
+        print(f"Processing Energy {E_pt:.3f} Done", flush=True)
         return temp_grid.grid, E_pt
-   
     except Exception as e:
         print(f"Error at energy {E_pt}: {e}")
         raise
@@ -87,20 +78,17 @@ if __name__ == "__main__":
     num_cores = int(os.getenv("SLURM_NTASKS", default=mp.cpu_count()))
 
     print(f"Number of cores: {num_cores}", flush=True)
-    # Parallelize the projection onto real space across energies
-    arg_list = list(zip(density_matrices, tbt.E))
     print(f"Total Energies: {tbt.nE}", flush=True)
+
+    arg_list = [(E, syslabel) for E in tbt.E]
+    # Parallelize the projection onto real space across energies
     with mp.Pool(processes=num_cores) as pool:
         results = pool.map(compute_ldos, arg_list)
 
-    calc, E = zip(*results)
-    E = np.array(E)
-    sort_indices = np.argsort(E)
-    sort_calc = [calc[i] for i in sort_indices]
-    sort_E = E[sort_indices]
+    calc = zip(*results)
 
-    ldos_grids = np.zeros((grid_template.shape[transport], grid_template.shape[vacuum], tbt.nE), dtype=np.float64)
-    for idx, grid_data in enumerate(sort_calc):
+    ldos_grids = np.zeros((grid_template.shape[transport], grid_template.shape[vacuum], tbt.nE), dtype=np.float32)
+    for idx, grid_data in enumerate(calc):
         ldos_grids[:, :, idx] = np.mean(grid_data, axis=ave)
 
     np.save("ldos_arr_par.npy", ldos_grids)

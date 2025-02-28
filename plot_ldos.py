@@ -30,7 +30,7 @@ print(f"Vacuum axis:    {vacuum}")
 
 if transport == vacuum:
     print("Transport and Vacuum direction cannot be same")
-    os._exit(1)
+    raise ValueError("Transport and Vacuum direction cannot be the same")
 
 periodic = ({0, 1, 2} - {transport, vacuum}).pop()   # Direction that is not transport or vacuum
 
