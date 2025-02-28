@@ -5,7 +5,7 @@ from sisl.io.tbtrans import tbtncSileTBtrans
 
 
 
-def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True, ldos_tol=1e-6):
+def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True, ldos_tol=1e-6, cutoff=5):
     """
     Plots the Local Density of States (LDOS) from a saved .npy file.
 
@@ -32,7 +32,7 @@ def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True
     dE = e_vals[1] - e_vals[0]
     print(f"Grid Density: dx={dx:.6f}, dz={dz:.6f}, dE={dE:.4f}")
 
-    cut = int(3 / dx)
+    cut = int(cutoff / dx) # Max radius, so we get solidly into region with existant LDOS
     # Extract scattering region from grid
     ldos_x = np.sum(data, axis=(1,2)) * dz * dE
     # Get valid indices where LDOS integral is above tolerance
@@ -70,9 +70,10 @@ def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True
 
 # Get Lattice information
 
-fdf = fdfSileSiesta("Device_long.fdf")
+fdf = fdfSileSiesta("Device.fdf")
 tbt = tbtncSileTBtrans("Device.TBT.nc")
 
+cutoff = fdf.read_geometry().maxR()
 lat = fdf.read_lattice(True)
 a1, a2, a3 = lat.cell  # Extract lattice vectors
 energy_axis = tbt.E  # eV
@@ -83,6 +84,6 @@ z_len = np.linalg.norm(a3)  # Out-of-plane direction (a3)
 
 print(f"Loaded Device Geometry: \n{lat.cell}")
 # Process ldos and plot
-plt = plot_ldos("ldos_arr_par.npy", x_range = y_len, z_range = z_len, e_vals = energy_axis, average_z=True)
+plt = plot_ldos("ldos_arr_par.npy", x_range = x_len, z_range = z_len, e_vals = energy_axis, average_z=True, cutoff = cutoff)
 
 plt.savefig('ldos_e.png')
