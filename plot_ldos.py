@@ -2,10 +2,39 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sisl.io.siesta import fdfSileSiesta
 from sisl.io.tbtrans import tbtncSileTBtrans
+import os
+import argparse
 
+dir_map = {'x': 0, 'a': 0, 'y': 1, 'b': 1, 'z': 2, 'c': 2}
 
+# Read some system input for files and geometry orientation
+parser = argparse.ArgumentParser(description="Compute LDOS from TBTrans Calculation")
+parser.add_argument("data_file", type=str,
+                    help=".npy file to load")
+parser.add_argument("syslabel", type=str,
+                    help="System Label before file endings (e.g. LABEL for LABEL.fdf, LABEL.TBT.nc)")
+parser.add_argument("transport_direction", type=str, choices=["x", "y", "z", "a", "b", "c"],
+                    help="Transport direction (xyz or abc)")
+parser.add_argument("vacuum_direction", type=str, choices=["x", "y", "z", "a", "b", "c"],
+                    help="Vacuum direction (xyz or abc)")
 
-def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True, ldos_tol=1e-6, cutoff=5):
+# Parse arguments
+args = parser.parse_args()
+ldos = args.data_file
+syslabel = args.syslabel
+transport = dir_map[args.transport_direction]
+vacuum = dir_map[args.vacuum_direction]
+
+print(f"Transport axis: {transport}")
+print(f"Vacuum axis:    {vacuum}")
+
+if transport == vacuum:
+    print("Transport and Vacuum direction cannot be same")
+    os._exit(1)
+
+periodic = ({0, 1, 2} - {transport, vacuum}).pop()   # Direction that is not transport or vacuum
+
+def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, ldos_tol=1e-6, cutoff=5):
     """
     Plots the Local Density of States (LDOS) from a saved .npy file.
 
@@ -40,50 +69,35 @@ def plot_ldos(file_path, x_range=None, z_range=None, e_vals=None, average_z=True
     # Remove one more angstrom from either side to get comfortably in the Scatt region
     valid_idx = valid_idx[cut:-cut]
     ldos_scatt = data[valid_idx, :, :]  # Shape: (n_valid_x, nz, nE)
-    #ldos_scatt = data
     x_vals = x_vals[valid_idx]
 
     print(f"LDOS scattering grid shape: {ldos_scatt.shape}")
-    print(f"LDOS data range is: ({x_vals[0]:.3f},{x_vals[-1]:.3f}),(0.000,{z_range:.3f}),({e_min:.3f},{e_max:.3f})")
+    print(f"LDOS plot range is: ({x_vals[0]:.3f},{x_vals[-1]:.3f}), ({e_min:.3f},{e_max:.3f})")
 
     # Plot based on averaging preference
-    if average_z:
-        dz = z_vals[1] - z_vals[0]
-        ldos_avg = np.sum(ldos_scatt, axis=1) * dz  # Integrate over Z
-        plt.imshow(ldos_avg.T, aspect='auto', origin='lower',
-                   extent=[x_vals[0], x_vals[-1], e_min, e_max],
-                   cmap='inferno')
-        plt.colorbar(label="LDOS (1/eV*Ang)")
-        plt.xlabel("x (Ang)")
-        plt.ylabel("Energy (eV)")
-    else:
-        dx = x_vals[1] - x_vals[0]
-        ldos_avg = np.sum(ldos_scatt, axis=0) * dx  # Integrate over x
-        plt.imshow(ldos_avg.T, aspect='auto', origin='lower',
-                   extent=[0, z_range, e_min, e_max],
-                   cmap='inferno')
-        plt.colorbar(label="LDOS (1/eV*Ang)")
-        plt.xlabel("z (Ang)")
-        plt.ylabel("Energy (eV)")
+    ldos_avg = np.sum(ldos_scatt, axis=1)  # Integrate over vacuum direction
+    plt.imshow(ldos_avg.T, aspect='auto', origin='lower',
+                extent=[x_vals[0], x_vals[-1], e_min, e_max],
+                cmap='inferno', vmin=0, vmax=max(ldos_avg / 10))
+    plt.colorbar(label="LDOS (1/eV*Ang^2)")
+    plt.xlabel("x (Ang)")
+    plt.ylabel("Energy (eV)")
 
     return plt
 
-# Get Lattice information
 
+# Get Lattice information
 fdf = fdfSileSiesta("Device.fdf")
 tbt = tbtncSileTBtrans("Device.TBT.nc")
 
 cutoff = fdf.read_geometry().maxR()
 lat = fdf.read_lattice(True)
-a1, a2, a3 = lat.cell  # Extract lattice vectors
 energy_axis = tbt.E  # eV
 
-x_len = np.linalg.norm(a1)  # Transport direction (a1)
-y_len = np.linalg.norm(a2)
-z_len = np.linalg.norm(a3)  # Out-of-plane direction (a3)
+x_len = np.linalg.norm(lat.cell[transport])  # Transport direction (a1)
+z_len = np.linalg.norm(lat.cell[vacuum])  # Out-of-plane direction (a3)
 
 print(f"Loaded Device Geometry: \n{lat.cell}")
 # Process ldos and plot
-plt = plot_ldos("ldos_arr_par.npy", x_range = x_len, z_range = z_len, e_vals = energy_axis, average_z=True, cutoff = cutoff)
-
+plt = plot_ldos(ldos, x_range=x_len, z_range=z_len, e_vals=energy_axis, cutoff=cutoff)
 plt.savefig('ldos_e.png')
